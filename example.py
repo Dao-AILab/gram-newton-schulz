@@ -11,8 +11,8 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from muon import Muon
-from newton_schulz.coefficients import YOU_COEFFICIENTS
+from gram_newton_schulz.muon import Muon
+from gram_newton_schulz.coefficients import YOU_COEFFICIENTS
 
 import torch._dynamo
 torch._dynamo.config.cache_size_limit = 128 

@@ -8,7 +8,7 @@ import seaborn as sns
 import torch
 from tqdm import tqdm
 
-from newton_schulz import StandardNewtonSchulz, GramNewtonSchulz
+from .. import StandardNewtonSchulz, GramNewtonSchulz
 import argparse
 
 PE_coeffs_list = [

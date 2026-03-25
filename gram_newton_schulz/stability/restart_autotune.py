@@ -5,7 +5,7 @@ Find locations of restarts.
 from collections import defaultdict
 from itertools import combinations
 from decimal import Decimal, getcontext, Overflow
-from newton_schulz.coefficients import POLAR_EXPRESS_COEFFICIENTS
+from ..coefficients import POLAR_EXPRESS_COEFFICIENTS
 
 getcontext().prec = 100
 

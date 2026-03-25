@@ -14,7 +14,7 @@ from datetime import datetime
 import torch
 from triton.testing import do_bench
 
-from newton_schulz import StandardNewtonSchulz, GramNewtonSchulz, YOU_COEFFICIENTS
+from gram_newton_schulz import StandardNewtonSchulz, GramNewtonSchulz, YOU_COEFFICIENTS
 
 def benchmark_ns_variant(callable_fn, X, warmup=5, repeats=30, desc=""):
     print(f"\n  {desc}")
