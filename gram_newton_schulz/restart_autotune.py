@@ -4,34 +4,33 @@ Find locations of restarts.
 """
 from collections import defaultdict
 from itertools import combinations
-from decimal import Decimal, getcontext, Overflow
+import mpmath
 from .coefficients import POLAR_EXPRESS_COEFFICIENTS
 
-getcontext().prec = 100
+mpmath.mp.dps = 100
 
 def run_gram_newton_schulz(x, coefs, most_negative_gram_eigenvalue, reset_indices=None):
     if reset_indices is None:
         reset_indices = []
 
     q_values = {}
-    q = Decimal(1)
-    r = Decimal(str(x)) * Decimal(str(x)) + Decimal(str(most_negative_gram_eigenvalue))
+    q = mpmath.mpf(1)
+    x = mpmath.mpf(x)
+    most_negative_gram_eigenvalue = mpmath.mpf(most_negative_gram_eigenvalue)
+    r = x * x + most_negative_gram_eigenvalue
 
-    try:
-        for iter_idx, (a, b, c) in enumerate(coefs):
-            if (iter_idx == 0) or (iter_idx in reset_indices):
-                if iter_idx != 0:
-                    x = q * Decimal(str(x))
-                    r = x * x + Decimal(str(most_negative_gram_eigenvalue))
-                q = Decimal(1)
+    for iter_idx, (a, b, c) in enumerate(coefs):
+        if (iter_idx == 0) or (iter_idx in reset_indices):
+            if iter_idx != 0:
+                x = q * x
+                r = x * x + most_negative_gram_eigenvalue
+            q = mpmath.mpf(1)
 
-            z = Decimal(str(c)) * r * r + Decimal(str(b)) * r + Decimal(str(a))
-            q *= z
-            r *= z * z
-            q_values[f'Q_{iter_idx}'] = float(q)
-    except Overflow:
-        for remaining_idx in range(iter_idx, len(coefs)):
-            q_values[f'Q_{remaining_idx}'] = float('inf')
+        a, b, c = mpmath.mpf(a), mpmath.mpf(b), mpmath.mpf(c)
+        z = c * r * r + b * r + a
+        q *= z
+        r *= z * z
+        q_values[f'Q_{iter_idx}'] = float(q)
 
     return q_values
 
