@@ -5,6 +5,11 @@ Blogpost:
 
 Achieve up to 2x faster Newton-Schulz with Gram Newton-Schulz and symmetric CuTeDSL GEMM kernels!
 
+What you're probably here for:
+1. Gram Newton-Schulz: https://github.com/Dao-AILab/gram-newton-schulz/blob/main/newton_schulz/gram_newton_schulz.py
+2. Gram Newton-Schulz Restart Autotune: https://github.com/Dao-AILab/gram-newton-schulz/blob/main/stability/restart_autotune.py
+3. Symmetric GEMMs for Hopper and Blackwell in CuTeDSL: https://github.com/Dao-AILab/quack/blob/main/quack/gemm_symmetric.py
+
 **Gram Newton-Schulz**
 
 > Input: $X \in \mathbb{R}^{n \times m}$ with $n \leq m$, coefficients $\{(a_t, b_t, c_t)\}_{t=1}^5$
