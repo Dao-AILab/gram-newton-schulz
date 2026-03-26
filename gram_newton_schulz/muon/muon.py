@@ -134,7 +134,7 @@ class Muon(Optimizer):
 
             print(f"Auto-tuning {gram_newton_schulz_num_restarts} restart position(s) for Gram Newton-Schulz...")
             self.gram_newton_schulz_reset_iterations = find_best_restarts(
-                x_eigenvalues, ns_coefficients, most_negative_gram_eigenvalue, num_restarts=gram_newton_schulz_num_restarts
+                x_eigenvalues, ns_coefficients, most_negative_gram_eigenvalue, num_restarts=gram_newton_schulz_num_restarts, high_precision=False
             )
             print(f"Selected restart positions: {self.gram_newton_schulz_reset_iterations}")
         else:

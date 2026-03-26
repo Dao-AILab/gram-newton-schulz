@@ -4,19 +4,35 @@ Find locations of restarts.
 """
 from itertools import combinations
 import numpy as np
-import gmpy2
-import flamp
 
-flamp.set_dps(100)
 
-def run_gram_newton_schulz(x_eigenvalues, coefs, most_negative_gram_eigenvalue, reset_indices=None):
+def _init_high_precision():
+    try:
+        import gmpy2
+        import flamp
+    except ImportError:
+        raise ImportError(
+            "high_precision=True requires the 'flamp' package (which provides gmpy2-backed "
+            "arbitrary-precision arrays). Install it with: pip install flamp"
+        ) from None
+    flamp.set_dps(100)
+    return gmpy2, flamp
+
+
+def run_gram_newton_schulz(x_eigenvalues, coefs, most_negative_gram_eigenvalue, high_precision=False, reset_indices=None):
     if reset_indices is None:
         reset_indices = []
 
-    x_eigenvalues = flamp.to_mp(x_eigenvalues)
-    most_negative_gram_eigenvalue = gmpy2.mpfr(most_negative_gram_eigenvalue)
-    coefs = [(gmpy2.mpfr(a), gmpy2.mpfr(b), gmpy2.mpfr(c)) for a, b, c in coefs]
-    ones = flamp.ones
+    assert most_negative_gram_eigenvalue < 0, "Most negative Gram eigenvalue must be negative"
+
+    if high_precision:
+        gmpy2, flamp = _init_high_precision()
+        x_eigenvalues = flamp.to_mp(x_eigenvalues)
+        most_negative_gram_eigenvalue = gmpy2.mpfr(most_negative_gram_eigenvalue)
+        coefs = [(gmpy2.mpfr(a), gmpy2.mpfr(b), gmpy2.mpfr(c)) for a, b, c in coefs]
+        ones = flamp.ones
+    else:
+        ones = np.ones
 
     q_values = {}
     q = ones(len(x_eigenvalues))
@@ -37,7 +53,7 @@ def run_gram_newton_schulz(x_eigenvalues, coefs, most_negative_gram_eigenvalue, 
     return q_values
 
 
-def find_best_restarts(x_eigenvalues, coefs, most_negative_gram_eigenvalue, num_restarts=1):
+def find_best_restarts(x_eigenvalues, coefs, most_negative_gram_eigenvalue, num_restarts=1, high_precision=False):
     possible_positions = list(range(1, len(coefs)))
     if num_restarts == 0:
         return []
@@ -52,7 +68,7 @@ def find_best_restarts(x_eigenvalues, coefs, most_negative_gram_eigenvalue, num_
 
     for i, restart_combo in enumerate(combinations(possible_positions, num_restarts)):
         test_restarts = list(restart_combo)
-        q_results = run_gram_newton_schulz(x_eigenvalues, coefs, most_negative_gram_eigenvalue, reset_indices=test_restarts)
+        q_results = run_gram_newton_schulz(x_eigenvalues, coefs, most_negative_gram_eigenvalue, high_precision=high_precision, reset_indices=test_restarts)
         max_q = max(np.max(np.abs(vals)) for vals in q_results.values())
 
         if max_q < best_max_q or (best_max_q == float('inf') and max_q != float('inf')):

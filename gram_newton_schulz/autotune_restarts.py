@@ -37,6 +37,13 @@ def main():
         help='Number of restart positions to find (default: 1)'
     )
 
+    parser.add_argument(
+        '--high-precision',
+        action='store_true',
+        default=False,
+        help='Use high-precision (100 decimal digit) arithmetic via gmpy2/flamp (default: off)'
+    )
+
     args = parser.parse_args()
 
     if args.coefs:
@@ -55,7 +62,7 @@ def main():
         print(f"Finding best {args.num_restarts} restart positions...")
 
     best_restarts = find_best_restarts(
-        x_eigenvalues, coefs, args.most_negative_gram_eigenvalue, num_restarts=args.num_restarts
+        x_eigenvalues, coefs, args.most_negative_gram_eigenvalue, num_restarts=args.num_restarts, high_precision=args.high_precision
     )
 
     if args.num_restarts == 1:
