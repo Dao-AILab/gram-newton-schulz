@@ -109,24 +109,23 @@ def run(
     :type iterations: int, optional
     """
 
-    tile_shape_mn = (128, 256)
+    device_capacity = get_device_capacity()
+    if isinstance(device_capacity, tuple):
+        device_capacity = device_capacity[0]
+
+    tile_m = 256 if device_capacity == 10 else 128
+    tile_shape_mn = (tile_m, 256)
     cluster_shape_mn = (2, 1)
     persistent = True
     dynamic_persistent = False
     pingpong = False
     varlen_m = False
     varlen_k = False
-    permute_batch = False
     gather_A = False
-    add_to_output = False
     fp8_fast_accum = False
+    mCuSeqlensM = None
+    mCuSeqlensK = None
     mAIdx = None
-    cu_seqlens_m, mCuSeqlensM = None, None
-    cu_seqlens_k, mCuSeqlensK = None, None
-
-    device_capacity = get_device_capacity()
-    if isinstance(device_capacity, tuple):
-        device_capacity = device_capacity[0]
 
     arch_name = "Blackwell (SM100)" if device_capacity == 10 else "Hopper (SM90)" if device_capacity == 9 else f"SM{device_capacity}0"
 

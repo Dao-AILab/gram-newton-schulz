@@ -76,5 +76,5 @@ def find_best_restarts(x_eigenvalues, coefs, most_negative_gram_eigenvalue, num_
             f"Need more restarts to achieve numerical stability. Try increasing num_restarts."
         )
 
-    print(f"\nBest combination: {best_restarts} with max Q = {best_max_q:.6f}")
+    print(f"\nBest restart locations (set `gram_newton_schulz_reset_iterations` in newton_schulz/gram_newton_schulz.py to this): {best_restarts} with max Q = {best_max_q:.6f}")
     return best_restarts
