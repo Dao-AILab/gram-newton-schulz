@@ -76,7 +76,7 @@ def find_best_restarts(x_eigenvalues, coefs, most_negative_gram_eigenvalue, num_
             f"Need more restarts to achieve numerical stability. Try increasing num_restarts."
         )
 
-    print(f"\nBest combination: {best_restarts} with max Q = {best_max_q:.6f}")
+    print(f"\nBest restart locations (set `gram_newton_schulz_reset_iterations` in newton_schulz/gram_newton_schulz.py to this): {best_restarts} with max Q = {best_max_q:.6f}")
     return best_restarts
 
 if __name__ == "__main__":
@@ -84,25 +84,25 @@ if __name__ == "__main__":
     import numpy as np
 
     parser = argparse.ArgumentParser(
-        description='Analyze numerical stability of Gram Newton-Schulz iteration'
+        description='Find best restart locations for Gram Newton-Schulz given coefficients and number of restarts user wants. More restarts are more stable but slower. We recommend 1 restart.'
     )
     parser.add_argument(
         '--most-negative-gram-eigenvalue',
         type=float,
         default=-4e-4,
-        help='Most negative Gram eigenvalue to add to XX^T (default: -4e-4)'
+        help='Most negative Gram eigenvalue hypothetically formed from XX^T (default: -4e-4)'
     )
     parser.add_argument(
         '--coefs',
         type=str,
         default=None,
-        help='Comma-separated list of coefficient tuples (a,b,c;a,b,c;...). If not provided, uses default POLAR_EXPRESS_COEFFICIENTS.'
+        help='Comma-separated list of coefficient float tuples (a,b,c;a,b,c;...). If not provided, uses default POLAR_EXPRESS_COEFFICIENTS.'
     )
     parser.add_argument(
         '--num-restarts',
         type=int,
         default=1,
-        help='Number of restart positions to find (default: 1)'
+        help='Number of restart positions to use (default: 1). We empirically determine that 1 restart is sufficient for 5 steps, but users experiencing instability or using more than 5 steps should use more restarts.'
     )
 
     args = parser.parse_args()
