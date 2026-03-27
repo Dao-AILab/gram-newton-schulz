@@ -40,9 +40,9 @@ class GramNewtonSchulz:
         self.ns_coefficients = ns_coefficients if ns_coefficients is not None else POLAR_EXPRESS_COEFFICIENTS
         if use_gram_newton_schulz:
             self.aspect_ratio_to_use_gram_newton_schulz = 1
+            self.gram_newton_schulz_reset_iterations = gram_newton_schulz_reset_iterations if gram_newton_schulz_reset_iterations is not None else [2]
         else:
             self.aspect_ratio_to_use_gram_newton_schulz = float('inf')
-        self.gram_newton_schulz_reset_iterations = gram_newton_schulz_reset_iterations if gram_newton_schulz_reset_iterations is not None else [2]
 
         if self.ns_use_kernels:
             from quack.gemm_interface import gemm_symmetric, gemm, gemm_add
@@ -55,10 +55,7 @@ class GramNewtonSchulz:
             self.gemm_add = None
 
     @torch.compile(fullgraph=True, mode="reduce-overhead")
-    def __call__(
-        self,
-        X: Tensor,
-    ) -> Tensor:
+    def __call__(self, X: Tensor) -> Tensor:
         """
         Orthogonalize a batch of matrices using Gram Newton-Schulz iteration.
 
@@ -75,7 +72,7 @@ class GramNewtonSchulz:
         elif X.ndim > 3:
             X = X.view(-1, *X.shape[-2:])
 
-        dtype, device = X.dtype, X.device
+        original_dtype = X.dtype
         X = X.to(torch.float32)
 
         if should_transpose := (X.size(-2) > X.size(-1)):
@@ -85,20 +82,23 @@ class GramNewtonSchulz:
         X = X.to(torch.float16)
 
         if max(X.shape[-2:]) > self.aspect_ratio_to_use_gram_newton_schulz * min(X.shape[-2:]):
-            X = self._gram_newton_schulz(X, device, dtype, should_transpose)
+            X = self._gram_newton_schulz(X)
         else:
-            X = self._standard_newton_schulz(X, dtype, should_transpose)
+            X = self._standard_newton_schulz(X)
 
-        return X.view(original_shape)
+        if should_transpose:
+            X = X.mT
 
-    def _gram_newton_schulz(self, X, device, dtype, should_transpose):
+        return X.to(original_dtype).view(original_shape)
+
+    def _gram_newton_schulz(self, X: Tensor) -> Tensor:
         if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
             R = X @ X.mT
         else:
             R = self.gemm_symmetric(X, X.mT)
 
         batch_size = R.size(0)
-        I = torch.eye(R.size(-1), device=device, dtype=X.dtype).unsqueeze(0).expand(batch_size, -1, -1).contiguous()
+        I = torch.eye(R.size(-1), device=X.device, dtype=X.dtype).unsqueeze(0).expand(batch_size, -1, -1).contiguous()
         Q = None
 
         for i, (a, b, c) in enumerate(self.ns_coefficients):
@@ -127,20 +127,14 @@ class GramNewtonSchulz:
                     RZ = self.gemm_symmetric(R, Z, C=R, beta=a)
                     R = self.gemm_symmetric(Z, RZ, C=RZ, beta=a)
 
-        if not should_transpose:
-            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                X = (Q @ X).to(dtype)
-            else:
-                X = self.gemm(Q, X).to(dtype)
+        if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+            X = Q @ X
         else:
-            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                X = (X.mT @ Q).to(dtype)
-            else:
-                X = self.gemm(X.mT, Q).to(dtype)
+            X = self.gemm(Q, X)
 
         return X
 
-    def _standard_newton_schulz(self, X, dtype, should_transpose):
+    def _standard_newton_schulz(self, X: Tensor) -> Tensor:
         for a, b, c in self.ns_coefficients:
             if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
                 A = X @ X.mT
@@ -150,9 +144,5 @@ class GramNewtonSchulz:
                 A = self.gemm_symmetric(X, X.mT)
                 B = self.gemm_symmetric(A, A, C=A, alpha=c, beta=b)
                 X = self.gemm_add(B, X, C=X, beta=a)
-
-        if should_transpose:
-            X = X.mT
-        X = X.to(dtype)
 
         return X
