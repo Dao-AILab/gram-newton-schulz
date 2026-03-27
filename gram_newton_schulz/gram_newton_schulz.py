@@ -23,6 +23,7 @@ class GramNewtonSchulz:
         ns_epsilon: float = 1e-7,
         ns_use_kernels: bool = True,
         ns_coefficients: Optional[List[List[float]]] = None,
+        use_gram_newton_schulz: bool = True,
         gram_newton_schulz_reset_iterations: List[int] = None,
     ):
         """
@@ -37,6 +38,10 @@ class GramNewtonSchulz:
         self.ns_epsilon = ns_epsilon
         self.ns_use_kernels = ns_use_kernels
         self.ns_coefficients = ns_coefficients if ns_coefficients is not None else POLAR_EXPRESS_COEFFICIENTS
+        if use_gram_newton_schulz:
+            self.aspect_ratio_to_use_gram_newton_schulz = 1
+        else:
+            self.aspect_ratio_to_use_gram_newton_schulz = float('inf')
         self.gram_newton_schulz_reset_iterations = gram_newton_schulz_reset_iterations if gram_newton_schulz_reset_iterations is not None else [2]
 
         if self.ns_use_kernels:
@@ -73,13 +78,13 @@ class GramNewtonSchulz:
         dtype, device = X.dtype, X.device
         X = X.to(torch.float32)
 
-        if should_transpose := X.size(-2) > X.size(-1):
+        if should_transpose := (X.size(-2) > X.size(-1)):
             X = X.mT
 
         X /= X.norm(dim=(-2, -1), keepdim=True) + self.ns_epsilon
         X = X.to(torch.float16)
 
-        if X.size(-2) != X.size(-1):
+        if max(X.shape[-2:]) > self.aspect_ratio_to_use_gram_newton_schulz * min(X.shape[-2:]):
             if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
                 R = X @ X.mT
             else:
