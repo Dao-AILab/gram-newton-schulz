@@ -85,60 +85,74 @@ class GramNewtonSchulz:
         X = X.to(torch.float16)
 
         if max(X.shape[-2:]) > self.aspect_ratio_to_use_gram_newton_schulz * min(X.shape[-2:]):
-            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                R = X @ X.mT
-            else:
-                R = self.gemm_symmetric(X, X.mT)
-
-            batch_size = R.size(0)
-            I = torch.eye(R.size(-1), device=device, dtype=X.dtype).unsqueeze(0).expand(batch_size, -1, -1).contiguous()
-            Q = None
-
-            for i, (a, b, c) in enumerate(self.ns_coefficients):
-                if i in self.gram_newton_schulz_reset_iterations and i != 0:
-                    if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                        X = Q @ X
-                        R = X @ X.mT
-                    else:
-                        X = self.gemm(Q, X)
-                        R = self.gemm_symmetric(X, X.mT)
-                    Q = None
-
-                if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                    Z = torch.baddbmm(R, R, R, beta=b, alpha=c)
-                    Q = torch.baddbmm(Q, Q, Z, beta=a) if i != 0 and i not in self.gram_newton_schulz_reset_iterations else Z + a * I
-                    if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
-                        RZ = torch.baddbmm(R, R, Z, beta=a)
-                        R = torch.baddbmm(RZ, Z, RZ, beta=a)
-                else:
-                    Z = self.gemm_symmetric(R, R, C=R, alpha=c, beta=b)
-                    Q = self.gemm_symmetric(Q, Z, C=Q, beta=a) if i != 0 and i not in self.gram_newton_schulz_reset_iterations else Z + a * I
-                    if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
-                        RZ = self.gemm_symmetric(R, Z, C=R, beta=a)
-                        R = self.gemm_symmetric(Z, RZ, C=RZ, beta=a)
-
-            if not should_transpose:
-                if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                    X = (Q @ X).to(dtype)
-                else:
-                    X = self.gemm(Q, X).to(dtype)
-            else:
-                if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                    X = (X.mT @ Q).to(dtype)
-                else:
-                    X = self.gemm(X.mT, Q).to(dtype)
+            X = self._gram_newton_schulz(X, device, dtype, should_transpose)
         else:
-            for i, (a, b, c) in enumerate(self.ns_coefficients):
-                if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                    A = X @ X.mT
-                    B = torch.baddbmm(A, A, A, beta=b, alpha=c)
-                    X = torch.baddbmm(X, B, X, beta=a)
-                else:
-                    A = self.gemm_symmetric(X, X.mT)
-                    B = self.gemm_symmetric(A, A, C=A, alpha=c, beta=b)
-                    X = self.gemm_add(B, X, C=X, beta=a)
-            if should_transpose:
-                X = X.mT
-            X = X.to(dtype)
+            X = self._standard_newton_schulz(X, dtype, should_transpose)
 
         return X.view(original_shape)
+
+    def _gram_newton_schulz(self, X, device, dtype, should_transpose):
+        if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+            R = X @ X.mT
+        else:
+            R = self.gemm_symmetric(X, X.mT)
+
+        batch_size = R.size(0)
+        I = torch.eye(R.size(-1), device=device, dtype=X.dtype).unsqueeze(0).expand(batch_size, -1, -1).contiguous()
+        Q = None
+
+        for i, (a, b, c) in enumerate(self.ns_coefficients):
+            if i in self.gram_newton_schulz_reset_iterations and i != 0:
+                if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+                    X = Q @ X
+                    R = X @ X.mT
+                else:
+                    X = self.gemm(Q, X)
+                    R = self.gemm_symmetric(X, X.mT)
+                Q = None
+
+            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+                Z = torch.baddbmm(R, R, R, beta=b, alpha=c)
+                Q = torch.baddbmm(Q, Q, Z, beta=a) if i != 0 and i not in self.gram_newton_schulz_reset_iterations else Z + a * I
+                if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
+                    RZ = torch.baddbmm(R, R, Z, beta=a)
+                    R = torch.baddbmm(RZ, Z, RZ, beta=a)
+            else:
+                Z = self.gemm_symmetric(R, R, C=R, alpha=c, beta=b) 
+                if i == 0 or i in self.gram_newton_schulz_reset_iterations:
+                    Q = Z + a * I
+                else:
+                    Q = self.gemm_symmetric(Q, Z, C=Q, beta=a)
+                if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
+                    RZ = self.gemm_symmetric(R, Z, C=R, beta=a)
+                    R = self.gemm_symmetric(Z, RZ, C=RZ, beta=a)
+
+        if not should_transpose:
+            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+                X = (Q @ X).to(dtype)
+            else:
+                X = self.gemm(Q, X).to(dtype)
+        else:
+            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+                X = (X.mT @ Q).to(dtype)
+            else:
+                X = self.gemm(X.mT, Q).to(dtype)
+
+        return X
+
+    def _standard_newton_schulz(self, X, dtype, should_transpose):
+        for a, b, c in self.ns_coefficients:
+            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
+                A = X @ X.mT
+                B = torch.baddbmm(A, A, A, beta=b, alpha=c)
+                X = torch.baddbmm(X, B, X, beta=a)
+            else:
+                A = self.gemm_symmetric(X, X.mT)
+                B = self.gemm_symmetric(A, A, C=A, alpha=c, beta=b)
+                X = self.gemm_add(B, X, C=X, beta=a)
+
+        if should_transpose:
+            X = X.mT
+        X = X.to(dtype)
+
+        return X
