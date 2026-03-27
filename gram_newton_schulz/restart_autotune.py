@@ -20,6 +20,8 @@ def _init_high_precision():
 
 
 def simulate_perturbed_gram_newton_schulz(x_eigenvalues, coefs, perturbation, high_precision=False, reset_indices=None):
+    x_eigenvalues = x_eigenvalues.copy()
+
     if reset_indices is None:
         reset_indices = []
 
