@@ -147,3 +147,29 @@ class GramNewtonSchulz:
             X = self._mm_add(B, X, C=X, beta=a)
 
         return X
+
+
+class StandardNewtonSchulz(GramNewtonSchulz):
+    """
+    Standard Newton-Schulz orthogonalization.
+
+    Equivalent to GramNewtonSchulz with use_gram_newton_schulz=False.
+
+    Example:
+        from gram_newton_schulz import StandardNewtonSchulz, POLAR_EXPRESS_COEFFICIENTS
+        standard_NS = StandardNewtonSchulz(ns_coefficients=POLAR_EXPRESS_COEFFICIENTS)
+        result = standard_NS(X)
+    """
+
+    def __init__(
+        self,
+        ns_epsilon: float = 1e-7,
+        ns_use_kernels: bool = True,
+        ns_coefficients: Optional[List[List[float]]] = None,
+    ):
+        super().__init__(
+            ns_epsilon=ns_epsilon,
+            ns_use_kernels=ns_use_kernels,
+            ns_coefficients=ns_coefficients,
+            use_gram_newton_schulz=False,
+        )
