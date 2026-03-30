@@ -46,13 +46,36 @@ class GramNewtonSchulz:
 
         if self.ns_use_kernels:
             from quack.gemm_interface import gemm_symmetric, gemm, gemm_add
-            self.gemm_symmetric = gemm_symmetric
-            self.gemm = gemm
-            self.gemm_add = gemm_add
+            self._gemm_symmetric = gemm_symmetric
+            self._gemm = gemm
+            self._gemm_add = gemm_add
+
+    def _use_kernels(self, A: Tensor, B: Tensor) -> bool:
+        return self.ns_use_kernels and min(A.size(-2), B.size(-1)) > SYMMETRIC_KERNEL_TILE_SIZE
+
+    def _sym_mm(self, A: Tensor, B: Tensor) -> Tensor:
+        if self._use_kernels(A, B):
+            return self._gemm_symmetric(A, B)
         else:
-            self.gemm_symmetric = None
-            self.gemm = None
-            self.gemm_add = None
+            return A @ B
+
+    def _sym_baddbmm(self, A: Tensor, B: Tensor, C: Tensor, alpha: float = 1, beta: float = 1) -> Tensor:
+        if self._use_kernels(A, B):
+            return self._gemm_symmetric(A, B, C=C, alpha=alpha, beta=beta)
+        else:
+            return torch.baddbmm(C, A, B, alpha=alpha, beta=beta)
+
+    def _mm(self, A: Tensor, B: Tensor) -> Tensor:
+        if self._use_kernels(A, B):
+            return self._gemm(A, B)
+        else:
+            return A @ B
+
+    def _mm_add(self, A: Tensor, B: Tensor, C: Tensor, beta: float) -> Tensor:
+        if self._use_kernels(A, B):
+            return self._gemm_add(A, B, C=C, beta=beta)
+        else:
+            return torch.baddbmm(C, A, B, beta=beta)
 
     @torch.compile(fullgraph=True, mode="reduce-overhead")
     def __call__(self, X: Tensor) -> Tensor:
@@ -92,10 +115,7 @@ class GramNewtonSchulz:
         return X.to(original_dtype).view(original_shape)
 
     def _gram_newton_schulz(self, X: Tensor) -> Tensor:
-        if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-            R = X @ X.mT
-        else:
-            R = self.gemm_symmetric(X, X.mT)
+        R = self._sym_mm(X, X.mT)
 
         batch_size = R.size(0)
         I = torch.eye(R.size(-1), device=X.device, dtype=X.dtype).unsqueeze(0).expand(batch_size, -1, -1).contiguous()
@@ -103,46 +123,27 @@ class GramNewtonSchulz:
 
         for i, (a, b, c) in enumerate(self.ns_coefficients):
             if i in self.gram_newton_schulz_reset_iterations and i != 0:
-                if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                    X = Q @ X
-                    R = X @ X.mT
-                else:
-                    X = self.gemm(Q, X)
-                    R = self.gemm_symmetric(X, X.mT)
+                X = self._mm(Q, X)
+                R = self._sym_mm(X, X.mT)
                 Q = None
 
-            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                Z = torch.baddbmm(R, R, R, beta=b, alpha=c)
-                Q = torch.baddbmm(Q, Q, Z, beta=a) if i != 0 and i not in self.gram_newton_schulz_reset_iterations else Z + a * I
-                if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
-                    RZ = torch.baddbmm(R, R, Z, beta=a)
-                    R = torch.baddbmm(RZ, Z, RZ, beta=a)
+            Z = self._sym_baddbmm(R, R, C=R, alpha=c, beta=b)
+            if i == 0 or i in self.gram_newton_schulz_reset_iterations:
+                Q = Z + a * I
             else:
-                Z = self.gemm_symmetric(R, R, C=R, alpha=c, beta=b) 
-                if i == 0 or i in self.gram_newton_schulz_reset_iterations:
-                    Q = Z + a * I
-                else:
-                    Q = self.gemm_symmetric(Q, Z, C=Q, beta=a)
-                if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
-                    RZ = self.gemm_symmetric(R, Z, C=R, beta=a)
-                    R = self.gemm_symmetric(Z, RZ, C=RZ, beta=a)
+                Q = self._sym_baddbmm(Q, Z, C=Q, beta=a)
+            if i < len(self.ns_coefficients) - 1 and i + 1 not in self.gram_newton_schulz_reset_iterations:
+                RZ = self._sym_baddbmm(R, Z, C=R, beta=a)
+                R = self._sym_baddbmm(Z, RZ, C=RZ, beta=a)
 
-        if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-            X = Q @ X
-        else:
-            X = self.gemm(Q, X)
+        X = self._mm(Q, X)
 
         return X
 
     def _standard_newton_schulz(self, X: Tensor) -> Tensor:
         for a, b, c in self.ns_coefficients:
-            if not self.ns_use_kernels or X.size(-2) <= SYMMETRIC_KERNEL_TILE_SIZE:
-                A = X @ X.mT
-                B = torch.baddbmm(A, A, A, beta=b, alpha=c)
-                X = torch.baddbmm(X, B, X, beta=a)
-            else:
-                A = self.gemm_symmetric(X, X.mT)
-                B = self.gemm_symmetric(A, A, C=A, alpha=c, beta=b)
-                X = self.gemm_add(B, X, C=X, beta=a)
+            A = self._sym_mm(X, X.mT)
+            B = self._sym_baddbmm(A, A, C=A, alpha=c, beta=b)
+            X = self._mm_add(B, X, C=X, beta=a)
 
         return X
