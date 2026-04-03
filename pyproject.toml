@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gram-newton-schulz"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Fast Newton-Schulz Algorithm with Kernels"
 authors = [
     {name = "Jack Zhang"},
@@ -34,6 +34,9 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["gram_newton_schulz*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "gram_newton_schulz.__version__"}
 
 [tool.setuptools.package-data]
 "*" = ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]

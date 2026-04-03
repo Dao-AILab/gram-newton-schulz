@@ -113,7 +113,7 @@ def run(
     if isinstance(device_capacity, tuple):
         device_capacity = device_capacity[0]
 
-    tile_m = 256 if device_capacity == 10 else 128
+    tile_m = 256 if device_capacity >= 10 else 128
     tile_shape_mn = (tile_m, 256)
     cluster_shape_mn = (2, 1)
     persistent = True
@@ -127,7 +127,14 @@ def run(
     mCuSeqlensK = None
     mAIdx = None
 
-    arch_name = "Blackwell (SM100)" if device_capacity == 10 else "Hopper (SM90)" if device_capacity == 9 else f"SM{device_capacity}0"
+    if device_capacity == 12:
+        arch_name = "RTX 5090 (SM120)"
+    elif device_capacity == 10:
+        arch_name = "Blackwell (SM100)"
+    elif device_capacity == 9:
+        arch_name = "Hopper (SM90)"
+    else:
+        arch_name = f"SM{device_capacity}0"
 
     print(f"Running {arch_name} Dense GEMM with:")
     print(f"mnkl: {mnkl}")

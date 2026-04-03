@@ -61,11 +61,9 @@ class GramNewtonSchulz:
         self.ns_epsilon = ns_epsilon
         self.ns_use_kernels = ns_use_kernels
         self.ns_coefficients = ns_coefficients if ns_coefficients is not None else POLAR_EXPRESS_COEFFICIENTS
+        self.use_gram_newton_schulz = use_gram_newton_schulz
         if use_gram_newton_schulz:
-            self.aspect_ratio_to_use_gram_newton_schulz = 1
             self.gram_newton_schulz_reset_iterations = gram_newton_schulz_reset_iterations if gram_newton_schulz_reset_iterations is not None else [2]
-        else:
-            self.aspect_ratio_to_use_gram_newton_schulz = float('inf')
 
         self._kernel_backend = _make_kernel_backend() if self.ns_use_kernels else None
 
@@ -103,7 +101,7 @@ class GramNewtonSchulz:
         X /= X.norm(dim=(-2, -1), keepdim=True) + self.ns_epsilon
         X = X.to(torch.float16)
 
-        if max(X.shape[-2:]) > self.aspect_ratio_to_use_gram_newton_schulz * min(X.shape[-2:]):
+        if self.use_gram_newton_schulz and max(X.shape[-2:]) > min(X.shape[-2:]):
             X = self._gram_newton_schulz(X)
         else:
             X = self._standard_newton_schulz(X)
