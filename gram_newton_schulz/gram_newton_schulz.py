@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from typing import List, Optional
+from typing import Dict, List, Optional
 import torch
 from torch import Tensor
 from .coefficients import POLAR_EXPRESS_COEFFICIENTS
@@ -45,6 +45,7 @@ class GramNewtonSchulz:
         ns_coefficients: Optional[List[List[float]]] = None,
         use_gram_newton_schulz: bool = True,
         gram_newton_schulz_reset_iterations: List[int] = None,
+        compile_kwargs: Optional[Dict] = {"fullgraph": True, "mode": "reduce-overhead"},
     ):
         """
         Initialize GramNewtonSchulz orthogonalizer.
@@ -54,6 +55,8 @@ class GramNewtonSchulz:
             ns_use_kernels: Whether to use custom CuTeDSL kernels
             ns_coefficients: Coefficients for each iteration. Defaults to POLAR_EXPRESS_COEFFICIENTS.
             gram_newton_schulz_reset_iterations: Iterations at which to reset. Defaults to [2].
+            compile_kwargs: Keyword arguments forwarded to torch.compile for __call__.
+                Defaults to {"fullgraph": True, "mode": "reduce-overhead"}. Pass None to disable compilation.
         """
         self.ns_epsilon = ns_epsilon
         self.ns_use_kernels = ns_use_kernels
@@ -66,12 +69,14 @@ class GramNewtonSchulz:
 
         self._kernel_backend = _make_kernel_backend() if self.ns_use_kernels else None
 
+        if compile_kwargs is not None:
+            self.__call__ = torch.compile(self.__call__, **compile_kwargs)
+
     def _select_backend(self, X: Tensor):
         if self._kernel_backend is not None and min(X.size(-2), X.size(-1)) > SYMMETRIC_KERNEL_TILE_SIZE:
             return self._kernel_backend
         return _TORCH_BACKEND
 
-    @torch.compile(fullgraph=True, mode="reduce-overhead")
     def __call__(self, X: Tensor) -> Tensor:
         """
         Orthogonalize a batch of matrices using Gram Newton-Schulz iteration.
@@ -162,10 +167,12 @@ class StandardNewtonSchulz(GramNewtonSchulz):
         ns_epsilon: float = 1e-7,
         ns_use_kernels: bool = True,
         ns_coefficients: Optional[List[List[float]]] = None,
+        compile_kwargs: Optional[Dict] = {"fullgraph": True, "mode": "reduce-overhead"},
     ):
         super().__init__(
             ns_epsilon=ns_epsilon,
             ns_use_kernels=ns_use_kernels,
             ns_coefficients=ns_coefficients,
             use_gram_newton_schulz=False,
+            compile_kwargs=compile_kwargs,
         )
