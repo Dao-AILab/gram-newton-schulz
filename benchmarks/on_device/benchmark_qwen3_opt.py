@@ -182,9 +182,16 @@ def run_single_variant(variant, num_layers, warmup, repeats, do_profile, trace_f
     else:
         raise ValueError(f"Unknown variant: {variant}")
 
+    # Note: create_fake_gradients is inside the timed region (consistent with
+    # benchmark_gemma4_opt.py). This adds ~1-2ms of overhead shared across all
+    # variants, so relative comparisons remain valid.
     compiled_step = torch.compile(step, fullgraph=False)
     time.sleep(0.5)
+    # Reset peak stats after warmup/compilation so we only measure steady-state
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
     ms = do_bench(compiled_step, warmup=warmup, rep=repeats)
+    torch.cuda.synchronize()
     peak_gb = torch.cuda.max_memory_allocated() / 1e9
 
     if do_profile and trace_file:
@@ -296,7 +303,12 @@ def main():
         env = os.environ.copy()
         env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
+        except subprocess.TimeoutExpired as exc:
+            print(f"  FAILED (timed out after {exc.timeout}s)")
+            results.append((label, float("inf")))
+            continue
 
         # Print subprocess stderr (compilation logs, warnings)
         for line in proc.stderr.splitlines():
