@@ -340,12 +340,20 @@ class Muon(Optimizer):
                     # clone() needed: reduce-overhead CUDA graphs reuse output buffers
                     orthogonalized_by_shape[shape] = orthogonalized_batched.clone()
                 else:
-                    # Process in micro-batches to reduce peak memory
-                    chunks = []
-                    for i in range(0, len(ns_inputs_for_shape), max_bs):
+                    # Process in micro-batches to reduce peak memory.
+                    # Pre-allocate output to avoid holding all chunks + cat result simultaneously.
+                    total = len(ns_inputs_for_shape)
+                    first_end = min(max_bs, total)
+                    first_chunk = torch.stack(ns_inputs_for_shape[:first_end], dim=0)
+                    # clone() needed: reduce-overhead CUDA graphs reuse output buffers
+                    first_out = self.newton_schulz(first_chunk).clone()
+                    full_output = first_out.new_empty((total, *first_out.shape[1:]))
+                    full_output[:first_end].copy_(first_out)
+                    for i in range(first_end, total, max_bs):
                         chunk = torch.stack(ns_inputs_for_shape[i:i + max_bs], dim=0)
-                        chunks.append(self.newton_schulz(chunk).clone())
-                    orthogonalized_by_shape[shape] = torch.cat(chunks, dim=0)
+                        chunk_out = self.newton_schulz(chunk).clone()
+                        full_output[i:i + chunk_out.shape[0]].copy_(chunk_out)
+                    orthogonalized_by_shape[shape] = full_output
 
             # Apply LR to each split section based on its shape
             orthogonalized_by_shape = scale_newton_schulz_outputs_with_adjusted_lr(
