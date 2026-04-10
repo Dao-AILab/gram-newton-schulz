@@ -20,8 +20,8 @@ def _make_kernel_backend():
     return SimpleNamespace(
         sym_mm=gemm_symmetric,
         sym_baddbmm=lambda A, B, C, alpha=1, beta=1: gemm_symmetric(A, B, C=C, alpha=alpha, beta=beta),
-        mm=gemm,
-        mm_add=lambda A, B, C, beta: gemm_add(A, B, C=C, beta=beta),
+        mm=lambda A, B: gemm(A, B, tuned=False),
+        mm_add=lambda A, B, C, beta: gemm_add(A, B, C=C, beta=beta, tuned=False),
     )
 
 
