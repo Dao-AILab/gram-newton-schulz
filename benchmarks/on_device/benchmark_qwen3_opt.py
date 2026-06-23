@@ -307,7 +307,7 @@ def main():
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
         except subprocess.TimeoutExpired as exc:
             print(f"  FAILED (timed out after {exc.timeout}s)")
-            results.append((label, float("inf")))
+            results.append((label, float("inf"), "timeout"))
             continue
 
         # Print subprocess stderr (compilation logs, warnings)
@@ -324,21 +324,22 @@ def main():
                 print(f"  {line}")
 
         if proc.returncode != 0:
+            is_oom = "OutOfMemoryError" in proc.stderr
             print(f"  FAILED (exit code {proc.returncode})")
-            if "OutOfMemoryError" in proc.stderr:
+            if is_oom:
                 print(f"  OOM -- try --num-layers {max(1, num_layers - 4)}")
-            results.append((label, float("inf")))
+            results.append((label, float("inf"), "oom" if is_oom else "failed"))
         elif result_line:
             data = json.loads(result_line)
             ms = data["ms"]
             peak = data["peak_gb"]
             print(f"  Median time: {ms:.3f} ms  (peak GPU: {peak:.1f} GB)")
-            results.append((label, ms))
+            results.append((label, ms, "ok"))
             if args.profile and trace_file:
                 print(f"  Trace: {trace_file}")
         else:
             print(f"  ERROR: no result parsed")
-            results.append((label, float("inf")))
+            results.append((label, float("inf"), "failed"))
 
     # ── Summary ───────────────────────────────────────────────────────
     print(f"\n{'=' * 80}")
@@ -347,9 +348,10 @@ def main():
     print(f"{'Variant':<45} | {'Time (ms)':>10} | {'vs AdamW':>10}")
     print("-" * 75)
     baseline = results[0][1]
-    for name, ms in results:
-        if ms == float("inf"):
-            print(f"{name:<45} |        OOM |        N/A")
+    status_label = {"oom": "OOM", "timeout": "TIMEOUT", "failed": "FAILED"}
+    for name, ms, status in results:
+        if status != "ok":
+            print(f"{name:<45} | {status_label.get(status, 'FAILED'):>10} |        N/A")
         else:
             ratio = f"{baseline / ms:.2f}x" if ms > 0 else "N/A"
             print(f"{name:<45} | {ms:10.3f} | {ratio:>10}")
