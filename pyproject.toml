@@ -18,7 +18,7 @@ license = {text = "MIT"}
 dependencies = [
     "torch>=2.7.1",
     "quack-kernels>=0.4.1",
-    "nvidia-cutlass-dsl==4.4.2",
+    "nvidia-cutlass-dsl>=4.4.2",
 ]
 
 [project.optional-dependencies]
