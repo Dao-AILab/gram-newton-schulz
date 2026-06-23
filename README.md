@@ -62,7 +62,7 @@ This will install:
 
 - gram-newton-schulz (this package)
 - nvidia-cutlass-dsl 4.4.2
-- quack-kernels>=0.3.8
+- quack-kernels>=0.4.1
 
 ## Usage
 

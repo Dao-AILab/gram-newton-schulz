@@ -9,7 +9,7 @@ SYMMETRIC_KERNEL_TILE_SIZE = 256
 
 _TORCH_BACKEND = SimpleNamespace(
     sym_mm=lambda A, B: A @ B,
-    sym_baddbmm=lambda A, B, C, alpha=1, beta=1: torch.baddbmm(C, A, B, alpha=alpha, beta=beta),
+    sym_baddbmm=lambda A, B, C, alpha=1., beta=1.: torch.baddbmm(C, A, B, alpha=alpha, beta=beta),
     mm=lambda A, B: A @ B,
     mm_add=lambda A, B, C, beta: torch.baddbmm(C, A, B, beta=beta),
 )
@@ -19,7 +19,7 @@ def _make_kernel_backend():
     from quack.gemm_interface import gemm_symmetric, gemm, gemm_add
     return SimpleNamespace(
         sym_mm=gemm_symmetric,
-        sym_baddbmm=lambda A, B, C, alpha=1, beta=1: gemm_symmetric(A, B, C=C, alpha=alpha, beta=beta),
+        sym_baddbmm=lambda A, B, C, alpha=1., beta=1.: gemm_symmetric(A, B, C=C, alpha=alpha, beta=beta),
         mm=gemm,
         mm_add=lambda A, B, C, beta: gemm_add(A, B, C=C, beta=beta),
     )

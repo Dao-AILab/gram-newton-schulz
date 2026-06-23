@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "0.1.4"
 
 from .gram_newton_schulz import GramNewtonSchulz, StandardNewtonSchulz
 from .coefficients import YOU_COEFFICIENTS, POLAR_EXPRESS_COEFFICIENTS
