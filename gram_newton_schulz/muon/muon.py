@@ -60,6 +60,11 @@ class Muon(Optimizer):
             - "gram_newton_schulz": Gram Newton-Schulz iteration with optional resets
             - "standard_newton_schulz": Standard Newton-Schulz iteration
             (default: "gram_newton_schulz")
+        ns_max_batch_size: Maximum number of matrices per Newton-Schulz call.
+            When a shape group has more matrices than this, they are processed in
+            micro-batches to reduce peak GPU memory. None means no limit (all
+            matrices of the same shape are processed in one call).
+            (default: None)
         ns_epsilon: Epsilon for Frobenius normalization before orthogonalization (default: 1e-7)
         ns_use_kernels: Use custom CUDA kernels if available (requires compute capability 9.0+) (default: True)
         gram_newton_schulz_num_restarts: Number of restarts for Gram Newton-Schulz. Restart positions are automatically tuned during initialization. Ignored if gram_newton_schulz_restart_iterations is provided. (default: 1)
@@ -83,6 +88,7 @@ class Muon(Optimizer):
         ns_algorithm: str = "gram_newton_schulz",
         ns_epsilon: float = 1e-7,
         ns_use_kernels: bool = True,
+        ns_max_batch_size: Optional[int] = None,
         gram_newton_schulz_num_restarts: int = 1,
         gram_newton_schulz_restart_iterations: Optional[Union[List[int], Tuple[int, ...]]] = None,
         # Scalar optimizer
@@ -125,9 +131,13 @@ class Muon(Optimizer):
                     f"Each iteration must have exactly 3 Newton-Schulz coefficients, got {len(coef)} at iteration {i}"
                 )
 
+        if ns_max_batch_size is not None and (not isinstance(ns_max_batch_size, int) or ns_max_batch_size < 1):
+            raise ValueError(f"ns_max_batch_size must be a positive integer or None, got {ns_max_batch_size}")
+
         self.ns_coefficients = ns_coefficients
         self.ns_algorithm = ns_algorithm
         self.ns_epsilon = ns_epsilon
+        self.ns_max_batch_size = ns_max_batch_size
 
         if gram_newton_schulz_restart_iterations is not None:
             self.gram_newton_schulz_reset_iterations = gram_newton_schulz_restart_iterations
@@ -322,11 +332,28 @@ class Muon(Optimizer):
 
             # Orthogonalize each submatrix shape group
             orthogonalized_by_shape = {}
+            max_bs = self.ns_max_batch_size
             for shape, ns_inputs_for_shape in ns_inputs_by_shape.items():
-                batched_input = torch.stack(ns_inputs_for_shape, dim=0)
-
-                orthogonalized_batched = self.newton_schulz(batched_input)
-                orthogonalized_by_shape[shape] = orthogonalized_batched.clone()
+                if max_bs is None or len(ns_inputs_for_shape) <= max_bs:
+                    batched_input = torch.stack(ns_inputs_for_shape, dim=0)
+                    orthogonalized_batched = self.newton_schulz(batched_input)
+                    # clone() needed: reduce-overhead CUDA graphs reuse output buffers
+                    orthogonalized_by_shape[shape] = orthogonalized_batched.clone()
+                else:
+                    # Process in micro-batches to reduce peak memory.
+                    # Pre-allocate output to avoid holding all chunks + cat result simultaneously.
+                    total = len(ns_inputs_for_shape)
+                    first_end = min(max_bs, total)
+                    first_chunk = torch.stack(ns_inputs_for_shape[:first_end], dim=0)
+                    # clone() needed: reduce-overhead CUDA graphs reuse output buffers
+                    first_out = self.newton_schulz(first_chunk).clone()
+                    full_output = first_out.new_empty((total, *first_out.shape[1:]))
+                    full_output[:first_end].copy_(first_out)
+                    for i in range(first_end, total, max_bs):
+                        chunk = torch.stack(ns_inputs_for_shape[i:i + max_bs], dim=0)
+                        chunk_out = self.newton_schulz(chunk).clone()
+                        full_output[i:i + chunk_out.shape[0]].copy_(chunk_out)
+                    orthogonalized_by_shape[shape] = full_output
 
             # Apply LR to each split section based on its shape
             orthogonalized_by_shape = scale_newton_schulz_outputs_with_adjusted_lr(
