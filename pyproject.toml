@@ -17,8 +17,8 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
     "torch>=2.7.1",
-    "quack-kernels>=0.4.1",
-    "nvidia-cutlass-dsl>=4.4.2",
+    "quack-kernels==0.5.0",
+    "nvidia-cutlass-dsl==4.5.2",
 ]
 
 [project.optional-dependencies]
